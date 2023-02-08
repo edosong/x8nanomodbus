@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,7 +77,51 @@ func main() {
 	for i := 0; i < int(dataNums); i++ {
 		readNanoSn(client)
 		fmt.Println()
+		getNanoData(client)
 		time.Sleep(time.Duration(rate) * time.Second)
+	}
+}
+
+// func getNanoData: get the data from the sn and reg add
+// in nanolist
+func getNanoData(client modbus.Client) {
+	var nanoData = [12]string{"", "", "", "", "", "", "", "", "", "", "", ""}
+	fmt.Println("Nano Modbus Data:", time.Now().Format("2006-01-02 15:04:05"))
+	for i := 0; i < MaxNanoNum; i++ {
+		if x8NanoList[i].startRegAddr == 0 {
+			continue
+		}
+		fmt.Printf("\nNano:%v\n", x8NanoList[i])
+		nanoDataBuf, err := client.ReadHoldingRegisters(x8NanoList[i].startRegAddr, 72)
+		fmt.Printf("NanoBuf:\n%v\n", nanoDataBuf)
+		if err != nil {
+			fmt.Println("Read Nano Data error:", x8NanoList[i].SN, "...", err)
+			continue
+		}
+		for j := 0; j < 3; j++ { //3 axis X, Y, Z
+			// OverAll A,B,C, Band A-F, DegC, Time(1/1/1970 12:00:00 AM)
+			fmt.Printf("\nAxis:%d \n-----\n", j+1)
+			m := j * 12 * 4
+			for k := 0; k < 12; k++ {
+				databits := uint32(nanoDataBuf[0+k*4+m]) | uint32(nanoDataBuf[1+k*4+m])<<8 | uint32(nanoDataBuf[2+k*4+m])<<16 | uint32(nanoDataBuf[3+k*4+m])<<24
+				if k != 11 {
+					nanoData[k] = fmt.Sprintf("%0.2f", math.Float32frombits(databits))
+				} else {
+					tm, err := strconv.ParseInt(fmt.Sprintf("%d", databits), 10, 64)
+					if err != nil {
+						fmt.Println("Nano time conversion err:", err)
+						nanoData[k] = ""
+					} else {
+						nanoData[k] = time.Unix(tm, 0).String()
+					}
+
+				}
+				fmt.Printf("(%d):%s, ", k+1, nanoData[k])
+
+			}
+
+		}
+		fmt.Println()
 	}
 }
 
@@ -87,41 +133,42 @@ func readNanoSn(client modbus.Client) {
 		fmt.Println("Read holding reg error.", err)
 	}
 
-	for i := 0; i < len(x8Data); i++ {
-		fmt.Printf("%v,", x8Data[i])
-	}
-	fmt.Println()
+	// for i := 0; i < len(x8Data); i++ {
+	fmt.Printf("%v\n", x8Data)
+	// }
+	// fmt.Println()
 	for i := 0; i < MaxNanoNum; i++ {
-		fmt.Printf("Nano No.%d..........\n", i+1)
-		for j := 0; j < 4; j++ {
-			fmt.Printf("%v,%v..", x8Data[j*2+i*12], x8Data[j*2+i*12+1])
-		}
+		fmt.Printf("Nano No.%d..", i+1)
+		// for j := 0; j < 4; j++ {
+		// 	fmt.Printf("%v,%v..", x8Data[j*2+i*12], x8Data[j*2+i*12+1])
+		// }
 		sn := string(x8Data[i*12 : i*12+8])
-		fmt.Printf("SN:=%s..", sn)
+		// fmt.Printf("SN:=%s..", sn)
 		ad := uint16(x8Data[10+i*12]) | uint16(x8Data[11+i*12])<<8
-		fmt.Printf("Reg:(%d, %X)\n", ad, ad)
 
 		if ad < 45035 && ad > 45001 && strings.Contains(sn, "Z2R1") {
 			x8NanoList[i].SN = sn
 			x8NanoList[i].startRegAddr = ad
+			fmt.Printf("Reg:(%d, %s)\n", ad, sn)
 		} else {
 			x8NanoList[i].SN = ""
 			x8NanoList[i].startRegAddr = 0
-			fmt.Println("Cannot reg:", x8NanoList[i])
+			fmt.Println()
+			// fmt.Println("Cannot reg:", x8NanoList[i])
 		}
 	}
 
-	for i := 0; i < MaxNanoNum; i++ {
-		if x8NanoList[i].startRegAddr > 0 {
-			fmt.Printf("No.%d %v\n", i, x8NanoList[i])
-		}
-	}
+	// for i := 0; i < MaxNanoNum; i++ {
+	// 	if x8NanoList[i].startRegAddr > 0 {
+	// 		fmt.Printf("No.%d %v\n", i, x8NanoList[i])
+	// 	}
+	// }
 }
 
 // func getNanoData(client modbus.Client, startAddr uint16) {
 
 func printNanoDataHeader() {
-	fmt.Printf("ZARK Nano Modbus Data\n----------------------\n")
-	fmt.Print("Time, ")
-	fmt.Printf("X, Y, Z axis, CIV\n")
+	fmt.Printf("Get ZARK Nano list\n----------------------\n")
+	// fmt.Print("Time, ")
+	// fmt.Printf("X, Y, Z axis, CIV\n")
 }
